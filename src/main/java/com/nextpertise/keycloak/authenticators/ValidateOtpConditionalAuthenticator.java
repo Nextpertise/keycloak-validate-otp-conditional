@@ -49,9 +49,6 @@ import static org.keycloak.models.utils.KeycloakModelUtils.getRoleFromString;
  * @version $Revision: 1 $
  */
 public class ValidateOtpConditionalAuthenticator implements Authenticator, CredentialValidator<OTPCredentialProvider> {
-//    public static final ValidateOtpConditionalAuthenticator SINGLETON = new ValidateOtpConditionalAuthenticator();
-//    public static final String PROVIDER_ID = "direct-grant-validate-otp-conditional";
-
     public static final String SKIP = "skip";
 
     public static final String FORCE = "force";
@@ -334,41 +331,28 @@ public class ValidateOtpConditionalAuthenticator implements Authenticator, Crede
         }
     }
 
-
-
-
-
-
-
-//
-//
     @Override
     public boolean requiresUser() {
         return true;
     }
-//
+
     @Override
     public boolean configuredFor(KeycloakSession session, RealmModel realm, UserModel user) {
         return getCredentialProvider(session).isConfiguredFor(realm, user);
     }
-//
-//    @Override
-//    public void setRequiredActions(KeycloakSession session, RealmModel realm, UserModel user) {
-//
-//    }
-//
+
     public OTPCredentialProvider getCredentialProvider(KeycloakSession session) {
         return (OTPCredentialProvider)session.getProvider(CredentialProvider.class, "keycloak-otp");
     }
-//
+
     public Response errorResponse(int status, String error, String errorDescription) {
         OAuth2ErrorRepresentation errorRep = new OAuth2ErrorRepresentation(error, errorDescription);
         return Response.status(status).entity(errorRep).type(MediaType.APPLICATION_JSON_TYPE).build();
     }
-//
+
     @Override
     public void action(AuthenticationFlowContext context) {}
-//
+
     @Override
     public void close() {
 
