@@ -3,8 +3,8 @@
 This plugin brings Conditional OTP to the Direct Grant.
 
 Mix between native plugins:
-- https://github.com/keycloak/keycloak/blob/bfce612641a70e106b20b136431f0e4046b5c37f/services/src/main/java/org/keycloak/authentication/authenticators/directgrant/ValidateOTP.java
-- https://github.com/keycloak/keycloak/blob/bfce612641a70e106b20b136431f0e4046b5c37f/services/src/main/java/org/keycloak/authentication/authenticators/browser/ConditionalOtpFormAuthenticator.java
+- [keycloak/keycloak/services/src/main/java/org/keycloak/authentication/authenticators/directgrant/ValidateOTP.java](https://github.com/keycloak/keycloak/blob/bfce612641a70e106b20b136431f0e4046b5c37f/services/src/main/java/org/keycloak/authentication/authenticators/directgrant/ValidateOTP.java)
+- [keycloak/keycloak/services/src/main/java/org/keycloak/authentication/authenticators/browser/ConditionalOtpFormAuthenticator.java](https://github.com/keycloak/keycloak/blob/bfce612641a70e106b20b136431f0e4046b5c37f/services/src/main/java/org/keycloak/authentication/authenticators/browser/ConditionalOtpFormAuthenticator.java)
 
 Inspired by: https://github.com/lukaszbudnik/keycloak-ip-authenticator
 
