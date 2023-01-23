@@ -1,0 +1,31 @@
+---
+name: docker_image_building
+kind: pipeline
+type: docker
+
+steps:
+- name: build plugin 
+  image: registry.nextpertise.tools/nextpertise-proxy/library/maven:3.8.7-openjdk-18
+  depends_on:
+    - clone
+  commands:
+  - mvn clean install
+  - find . -name '*.jar'
+
+- name: save as docker image
+  image: registry.nextpertise.tools/nextpertise-proxy/plugins/docker
+  depends_on:
+    - build plugin
+  privileged: true
+  settings:
+    repo: registry.nextpertise.tools/nextpertise/keycloak-validate-otp-conditional
+    registry: registry.nextpertise.tools
+    dockerfile: Dockerfile
+    pull_image: true
+    username:
+      from_secret: platform_harbor_username
+    password:
+      from_secret: platform_harbor_password
+
+image_pull_secrets:
+  - platform_harbor_pull_secrets
