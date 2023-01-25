@@ -50,7 +50,7 @@ public class ValidateOtpConditionalAuthenticatorFactory implements Authenticator
 
     @Override
     public boolean isUserSetupAllowed() {
-        return false;
+        return true;
     }
 
     @Override

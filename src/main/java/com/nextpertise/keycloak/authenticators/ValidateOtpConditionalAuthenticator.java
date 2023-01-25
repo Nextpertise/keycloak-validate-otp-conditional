@@ -1,22 +1,6 @@
 package com.nextpertise.keycloak.authenticators;
 
-/*
- * Copyright 2016 Red Hat, Inc. and/or its affiliates
- * and other contributors as indicated by the @author tags.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
+import org.jboss.logging.Logger;
 import org.keycloak.authentication.*;
 import org.keycloak.credential.CredentialProvider;
 import org.keycloak.credential.OTPCredentialProvider;
@@ -32,36 +16,27 @@ import java.util.Map;
 import org.keycloak.authentication.AuthenticationFlowContext;
 import org.keycloak.models.KeycloakSession;
 import org.keycloak.models.RealmModel;
-import org.keycloak.models.RoleModel;
 import org.keycloak.models.UserModel;
 
-import java.util.List;
 import java.util.Optional;
-import java.util.regex.Pattern;
 
 import static com.nextpertise.keycloak.authenticators.ValidateOtpConditionalAuthenticator.OtpDecision.ABSTAIN;
 import static com.nextpertise.keycloak.authenticators.ValidateOtpConditionalAuthenticator.OtpDecision.VALIDATE_OTP;
 import static com.nextpertise.keycloak.authenticators.ValidateOtpConditionalAuthenticator.OtpDecision.SKIP_OTP;
-import static org.keycloak.models.utils.KeycloakModelUtils.getRoleFromString;
 
 /**
- * @author <a href="mailto:bill@burkecentral.com">Bill Burke</a>
+ * @author <a href="mailto:teun@nextpertise.nl">Teun Ouwehand</a>
  * @version $Revision: 1 $
  */
 public class ValidateOtpConditionalAuthenticator implements Authenticator, CredentialValidator<OTPCredentialProvider> {
+
+    private static final Logger logger = Logger.getLogger(ValidateOtpConditionalAuthenticator.class);
+
     public static final String SKIP = "skip";
 
     public static final String FORCE = "force";
 
     public static final String OTP_CONTROL_USER_ATTRIBUTE = "otpControlAttribute";
-
-    public static final String SKIP_OTP_ROLE = "skipOtpRole";
-
-    public static final String FORCE_OTP_ROLE = "forceOtpRole";
-
-    public static final String SKIP_OTP_FOR_HTTP_HEADER = "noOtpRequiredForHeaderPattern";
-
-    public static final String FORCE_OTP_FOR_HTTP_HEADER = "forceOtpForHeaderPattern";
 
     public static final String DEFAULT_OTP_OUTCOME = "defaultOtpOutcome";
 
@@ -71,34 +46,26 @@ public class ValidateOtpConditionalAuthenticator implements Authenticator, Crede
 
     @Override
     public void authenticate(AuthenticationFlowContext context) {
+        logger.infof("Validate Otp Conditional Authenticator");
         Map<String, String> config = context.getAuthenticatorConfig().getConfig();
 
         if (tryConcludeBasedOn(voteForUserOtpControlAttribute(context.getUser(), config), context)) {
             return;
         }
 
-        if (tryConcludeBasedOn(voteForUserRole(context.getRealm(), context.getUser(), config), context)) {
-            return;
-        }
-
-        if (tryConcludeBasedOn(voteForHttpHeaderMatchesPattern(context.getHttpRequest().getHttpHeaders().getRequestHeaders(), config), context)) {
-            return;
-        }
-
         if (tryConcludeBasedOn(voteForDefaultFallback(config), context)) {
             return;
         }
+        context.success();
     }
 
     private void validateOtp(AuthenticationFlowContext context) {
-        if (!configuredFor(context.getSession(), context.getRealm(), context.getUser())) {
-            if (context.getExecution().isConditional()) {
-                context.attempted();
-            } else if (context.getExecution().isRequired()) {
-                context.getEvent().error(Errors.INVALID_USER_CREDENTIALS);
-                Response challengeResponse = errorResponse(Response.Status.UNAUTHORIZED.getStatusCode(), "invalid_grant", "Invalid user credentials");
-                context.failure(AuthenticationFlowError.INVALID_USER, challengeResponse);
-            }
+        logger.infof("Called validateOtp");
+        if (!getCredentialProvider(context.getSession()).isConfiguredFor(context.getRealm(), context.getUser())) {
+            context.getEvent().error(Errors.INVALID_USER_CREDENTIALS);
+            // TODO: Check if IP Whitelisting module is called/failed, for now we assume this is the case.
+            Response challengeResponse = errorResponse(Response.Status.UNAUTHORIZED.getStatusCode(), "invalid_grant", "IP not whitelisted and TOTP is not configured.");
+            context.failure(AuthenticationFlowError.INVALID_USER, challengeResponse);
             return;
         }
         MultivaluedMap<String, String> inputData = context.getHttpRequest().getDecodedFormParameters();
@@ -117,7 +84,7 @@ public class ValidateOtpConditionalAuthenticator implements Authenticator, Crede
                 context.getEvent().user(context.getUser());
             }
             context.getEvent().error(Errors.INVALID_USER_CREDENTIALS);
-            Response challengeResponse = errorResponse(Response.Status.UNAUTHORIZED.getStatusCode(), "invalid_grant", "Invalid user credentials");
+            Response challengeResponse = errorResponse(Response.Status.UNAUTHORIZED.getStatusCode(), "invalid_grant", "TOTP credential missing");
             context.failure(AuthenticationFlowError.INVALID_USER, challengeResponse);
             return;
         }
@@ -125,7 +92,7 @@ public class ValidateOtpConditionalAuthenticator implements Authenticator, Crede
         if (!valid) {
             context.getEvent().user(context.getUser());
             context.getEvent().error(Errors.INVALID_USER_CREDENTIALS);
-            Response challengeResponse = errorResponse(Response.Status.UNAUTHORIZED.getStatusCode(), "invalid_grant", "Invalid user credentials");
+            Response challengeResponse = errorResponse(Response.Status.UNAUTHORIZED.getStatusCode(), "invalid_grant", "TOTP credential invalid");
             context.failure(AuthenticationFlowError.INVALID_USER, challengeResponse);
             return;
         }
@@ -150,7 +117,7 @@ public class ValidateOtpConditionalAuthenticator implements Authenticator, Crede
     }
 
     private boolean tryConcludeBasedOn(OtpDecision state, AuthenticationFlowContext context) {
-
+        logger.infof("Called tryConcludeBasedOn");
         switch (state) {
 
             case VALIDATE_OTP:
@@ -160,21 +127,6 @@ public class ValidateOtpConditionalAuthenticator implements Authenticator, Crede
             case SKIP_OTP:
                 context.success();
                 return true;
-
-            default:
-                return false;
-        }
-    }
-
-    private boolean tryConcludeBasedOn(OtpDecision state) {
-
-        switch (state) {
-
-            case VALIDATE_OTP:
-                return true;
-
-            case SKIP_OTP:
-                return false;
 
             default:
                 return false;
@@ -207,141 +159,28 @@ public class ValidateOtpConditionalAuthenticator implements Authenticator, Crede
         }
     }
 
-    private OtpDecision voteForHttpHeaderMatchesPattern(MultivaluedMap<String, String> requestHeaders, Map<String, String> config) {
-
-        if (!config.containsKey(FORCE_OTP_FOR_HTTP_HEADER) && !config.containsKey(SKIP_OTP_FOR_HTTP_HEADER)) {
-            return ABSTAIN;
-        }
-
-        //Inverted to allow white-lists, e.g. for specifying trusted remote hosts: X-Forwarded-Host: (1.2.3.4|1.2.3.5)
-        if (containsMatchingRequestHeader(requestHeaders, config.get(SKIP_OTP_FOR_HTTP_HEADER))) {
-            return SKIP_OTP;
-        }
-
-        if (containsMatchingRequestHeader(requestHeaders, config.get(FORCE_OTP_FOR_HTTP_HEADER))) {
-            return VALIDATE_OTP;
-        }
-
-        return ABSTAIN;
-    }
-
-    private boolean containsMatchingRequestHeader(MultivaluedMap<String, String> requestHeaders, String headerPattern) {
-
-        if (headerPattern == null) {
-            return false;
-        }
-
-        //TODO cache RequestHeader Patterns
-        //TODO how to deal with pattern syntax exceptions?
-        // need CASE_INSENSITIVE flag so that we also have matches when the underlying container use a different case than what
-        // is usually expected (e.g.: vertx)
-        Pattern pattern = Pattern.compile(headerPattern, Pattern.DOTALL | Pattern.CASE_INSENSITIVE);
-
-        for (Map.Entry<String, List<String>> entry : requestHeaders.entrySet()) {
-
-            String key = entry.getKey();
-
-            for (String value : entry.getValue()) {
-
-                String headerEntry = key.trim() + ": " + value.trim();
-
-                if (pattern.matcher(headerEntry).matches()) {
-                    return true;
-                }
-            }
-        }
-
-        return false;
-    }
-
-    private OtpDecision voteForUserRole(RealmModel realm, UserModel user, Map<String, String> config) {
-
-        if (!config.containsKey(SKIP_OTP_ROLE) && !config.containsKey(FORCE_OTP_ROLE)) {
-            return ABSTAIN;
-        }
-
-        if (userHasRole(realm, user, config.get(SKIP_OTP_ROLE))) {
-            return SKIP_OTP;
-        }
-
-        if (userHasRole(realm, user, config.get(FORCE_OTP_ROLE))) {
-            return VALIDATE_OTP;
-        }
-
-        return ABSTAIN;
-    }
-
-    private boolean userHasRole(RealmModel realm, UserModel user, String roleName) {
-
-        if (roleName == null) {
-            return false;
-        }
-
-        RoleModel role = getRoleFromString(realm, roleName);
-        if (role != null) {
-            return user.hasRole(role);
-        }
-        return false;
-    }
-
-    private boolean isOTPRequired(KeycloakSession session, RealmModel realm, UserModel user) {
-        MultivaluedMap<String, String> requestHeaders = session.getContext().getRequestHeaders().getRequestHeaders();
-        return realm.getAuthenticatorConfigsStream().anyMatch(configModel -> {
-            if (tryConcludeBasedOn(voteForUserOtpControlAttribute(user, configModel.getConfig()))) {
-                return true;
-            }
-            if (tryConcludeBasedOn(voteForUserRole(realm, user, configModel.getConfig()))) {
-                return true;
-            }
-            if (tryConcludeBasedOn(voteForHttpHeaderMatchesPattern(requestHeaders, configModel.getConfig()))) {
-                return true;
-            }
-            if (configModel.getConfig().get(DEFAULT_OTP_OUTCOME) != null
-                    && configModel.getConfig().get(DEFAULT_OTP_OUTCOME).equals(FORCE)
-                    && configModel.getConfig().size() <= 1) {
-                return true;
-            }
-            if (containsConditionalOtpConfig(configModel.getConfig())
-                    && voteForUserOtpControlAttribute(user, configModel.getConfig()) == ABSTAIN
-                    && voteForUserRole(realm, user, configModel.getConfig()) == ABSTAIN
-                    && voteForHttpHeaderMatchesPattern(requestHeaders, configModel.getConfig()) == ABSTAIN
-                    && (voteForDefaultFallback(configModel.getConfig()) == VALIDATE_OTP
-                    || voteForDefaultFallback(configModel.getConfig()) == ABSTAIN)) {
-                return true;
-            }
-            return false;
-        });
-    }
-
-    private boolean containsConditionalOtpConfig(Map config) {
-        return config.containsKey(OTP_CONTROL_USER_ATTRIBUTE)
-                || config.containsKey(SKIP_OTP_ROLE)
-                || config.containsKey(FORCE_OTP_ROLE)
-                || config.containsKey(SKIP_OTP_FOR_HTTP_HEADER)
-                || config.containsKey(FORCE_OTP_FOR_HTTP_HEADER)
-                || config.containsKey(DEFAULT_OTP_OUTCOME);
-    }
-
     @Override
     public void setRequiredActions(KeycloakSession session, RealmModel realm, UserModel user) {
-        if (!isOTPRequired(session, realm, user)) {
-            user.removeRequiredAction(UserModel.RequiredAction.CONFIGURE_TOTP);
-        } else if (user.getRequiredActionsStream().noneMatch(UserModel.RequiredAction.CONFIGURE_TOTP.name()::equals)) {
-            user.addRequiredAction(UserModel.RequiredAction.CONFIGURE_TOTP.name());
-        }
+        logger.infof("called setRequiredActions");
+        user.removeRequiredAction(UserModel.RequiredAction.CONFIGURE_TOTP);
     }
 
     @Override
     public boolean requiresUser() {
+        logger.infof("called requiresUser");
         return true;
     }
 
     @Override
     public boolean configuredFor(KeycloakSession session, RealmModel realm, UserModel user) {
-        return getCredentialProvider(session).isConfiguredFor(realm, user);
+        logger.infof("called configuredFor");
+        // We will check in authenticate method if the user needs to authenticate with TOTP.
+        return true;
     }
 
+    @Override
     public OTPCredentialProvider getCredentialProvider(KeycloakSession session) {
+        logger.infof("called getCredentialProvider");
         return (OTPCredentialProvider)session.getProvider(CredentialProvider.class, "keycloak-otp");
     }
 
