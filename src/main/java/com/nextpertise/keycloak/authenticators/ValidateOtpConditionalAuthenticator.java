@@ -62,6 +62,7 @@ public class ValidateOtpConditionalAuthenticator implements Authenticator, Crede
     private void validateOtp(AuthenticationFlowContext context) {
         logger.infof("Called validateOtp");
         if (!getCredentialProvider(context.getSession()).isConfiguredFor(context.getRealm(), context.getUser())) {
+            logger.infof("ValidateOtp: IP not whitelisted and TOTP is not configured.");
             context.getEvent().error(Errors.INVALID_USER_CREDENTIALS);
             // TODO: Check if IP Whitelisting module is called/failed, for now we assume this is the case.
             Response challengeResponse = errorResponse(Response.Status.UNAUTHORIZED.getStatusCode(), "invalid_grant", "IP not whitelisted and TOTP is not configured.");
@@ -83,6 +84,7 @@ public class ValidateOtpConditionalAuthenticator implements Authenticator, Crede
             if (context.getUser() != null) {
                 context.getEvent().user(context.getUser());
             }
+            logger.infof("ValidateOtp: TOTP credential missing.");
             context.getEvent().error(Errors.INVALID_USER_CREDENTIALS);
             Response challengeResponse = errorResponse(Response.Status.UNAUTHORIZED.getStatusCode(), "invalid_grant", "TOTP credential missing");
             context.failure(AuthenticationFlowError.INVALID_USER, challengeResponse);
@@ -90,6 +92,7 @@ public class ValidateOtpConditionalAuthenticator implements Authenticator, Crede
         }
         boolean valid = getCredentialProvider(context.getSession()).isValid(context.getRealm(), context.getUser(), new UserCredentialModel(credentialId, OTPCredentialModel.TYPE, otp));
         if (!valid) {
+            logger.infof("ValidateOtp: TOTP credential invalid.");
             context.getEvent().user(context.getUser());
             context.getEvent().error(Errors.INVALID_USER_CREDENTIALS);
             Response challengeResponse = errorResponse(Response.Status.UNAUTHORIZED.getStatusCode(), "invalid_grant", "TOTP credential invalid");
@@ -97,6 +100,7 @@ public class ValidateOtpConditionalAuthenticator implements Authenticator, Crede
             return;
         }
 
+        logger.infof("ValidateOtp: TOTP pass.");
         context.success();
     }
 
@@ -117,7 +121,6 @@ public class ValidateOtpConditionalAuthenticator implements Authenticator, Crede
     }
 
     private boolean tryConcludeBasedOn(OtpDecision state, AuthenticationFlowContext context) {
-        logger.infof("Called tryConcludeBasedOn");
         switch (state) {
 
             case VALIDATE_OTP:
@@ -125,6 +128,7 @@ public class ValidateOtpConditionalAuthenticator implements Authenticator, Crede
                 return true;
 
             case SKIP_OTP:
+                logger.infof("SKIP_OTP=True, skipping ..");
                 context.success();
                 return true;
 
@@ -160,27 +164,21 @@ public class ValidateOtpConditionalAuthenticator implements Authenticator, Crede
     }
 
     @Override
-    public void setRequiredActions(KeycloakSession session, RealmModel realm, UserModel user) {
-        logger.infof("called setRequiredActions");
-        user.removeRequiredAction(UserModel.RequiredAction.CONFIGURE_TOTP);
-    }
+    public void setRequiredActions(KeycloakSession session, RealmModel realm, UserModel user) {}
 
     @Override
     public boolean requiresUser() {
-        logger.infof("called requiresUser");
         return true;
     }
 
     @Override
     public boolean configuredFor(KeycloakSession session, RealmModel realm, UserModel user) {
-        logger.infof("called configuredFor");
         // We will check in authenticate method if the user needs to authenticate with TOTP.
         return true;
     }
 
     @Override
     public OTPCredentialProvider getCredentialProvider(KeycloakSession session) {
-        logger.infof("called getCredentialProvider");
         return (OTPCredentialProvider)session.getProvider(CredentialProvider.class, "keycloak-otp");
     }
 
@@ -193,7 +191,5 @@ public class ValidateOtpConditionalAuthenticator implements Authenticator, Crede
     public void action(AuthenticationFlowContext context) {}
 
     @Override
-    public void close() {
-
-    }
+    public void close() {}
 }
