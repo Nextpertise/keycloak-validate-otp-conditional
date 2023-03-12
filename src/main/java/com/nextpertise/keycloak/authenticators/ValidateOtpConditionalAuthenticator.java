@@ -59,13 +59,25 @@ public class ValidateOtpConditionalAuthenticator implements Authenticator, Crede
         context.success();
     }
 
+    private String getRemoteAddress(AuthenticationFlowContext context) {
+        String realIPAddress = context.getConnection().getRemoteAddr();
+        if (context.getHttpRequest().getHttpHeaders().getRequestHeader("X-REAL-IP").size() > 0) {
+            realIPAddress = context.getHttpRequest().getHttpHeaders().getRequestHeader("X-REAL-IP").get(0);
+        }
+        if (context.getHttpRequest().getHttpHeaders().getRequestHeader("X-USER-IP").size() > 0) {
+            realIPAddress = context.getHttpRequest().getHttpHeaders().getRequestHeader("X-USER-IP").get(0);
+        }
+        return realIPAddress;
+    }
+
+
     private void validateOtp(AuthenticationFlowContext context) {
         logger.infof("Called validateOtp");
         if (!getCredentialProvider(context.getSession()).isConfiguredFor(context.getRealm(), context.getUser())) {
             logger.infof("ValidateOtp: IP not whitelisted and TOTP is not configured.");
             context.getEvent().error(Errors.INVALID_USER_CREDENTIALS);
             // TODO: Check if IP Whitelisting module is called/failed, for now we assume this is the case.
-            Response challengeResponse = errorResponse(Response.Status.UNAUTHORIZED.getStatusCode(), "invalid_grant", "IP not whitelisted and TOTP is not configured.");
+            Response challengeResponse = errorResponse(Response.Status.UNAUTHORIZED.getStatusCode(), "invalid_grant", String.format("Your IP address (%s) is not allowed and TOTP is not configured", getRemoteAddress(context)));
             context.failure(AuthenticationFlowError.INVALID_USER, challengeResponse);
             return;
         }
@@ -86,7 +98,7 @@ public class ValidateOtpConditionalAuthenticator implements Authenticator, Crede
             }
             logger.infof("ValidateOtp: TOTP credential missing.");
             context.getEvent().error(Errors.INVALID_USER_CREDENTIALS);
-            Response challengeResponse = errorResponse(Response.Status.UNAUTHORIZED.getStatusCode(), "invalid_grant", "TOTP credential missing");
+            Response challengeResponse = errorResponse(Response.Status.UNAUTHORIZED.getStatusCode(), "invalid_grant", "Cannot verify the identify of the consumer, TOTP code is missing");
             context.failure(AuthenticationFlowError.INVALID_USER, challengeResponse);
             return;
         }
@@ -95,7 +107,7 @@ public class ValidateOtpConditionalAuthenticator implements Authenticator, Crede
             logger.infof("ValidateOtp: TOTP credential invalid.");
             context.getEvent().user(context.getUser());
             context.getEvent().error(Errors.INVALID_USER_CREDENTIALS);
-            Response challengeResponse = errorResponse(Response.Status.UNAUTHORIZED.getStatusCode(), "invalid_grant", "TOTP credential invalid");
+            Response challengeResponse = errorResponse(Response.Status.UNAUTHORIZED.getStatusCode(), "invalid_grant", "Invalid TOTP code");
             context.failure(AuthenticationFlowError.INVALID_USER, challengeResponse);
             return;
         }
